@@ -4,6 +4,7 @@ import { ProfilerStore } from '../../common/ProfilerStore';
 import { Stack, StackBuilder } from '../../common/Stackbuilder';
 import { ProfilerRecord } from '../../common/ProfilerRecord';
 import { Request } from 'kuzzle';
+import { performance } from 'node:perf_hooks';
 
 export type ProfilerConfig = {
   capturePipeArguments?: boolean;
@@ -40,6 +41,10 @@ export class Profiler {
     });
   }
 
+  getTime(): number {
+    return performance.now();
+  }
+
   start(config: ProfilerConfig = {}) {
     if (this.running) {
       return;
@@ -71,16 +76,36 @@ export class Profiler {
     }
   }
 
+  private reagregateRecords(stack: Stack<ProfilerRecord>) {
+    if (stack.children.length === 0) {
+      return stack.value?.realTime || 0;
+    }
+
+    let realTime = 0;
+    for (const child of stack.children) {
+      realTime += this.reagregateRecords(child);
+    }
+    if (stack.value) {
+      stack.value.realTime = realTime;
+    }
+
+    return realTime;
+  }
+
   stop(): Stack<ProfilerRecord>[] {
     if (!this.running) {
       return;
     }
-    
+
     this.restore();
 
     this.asyncHook.disable();
 
     this.running = false;
+
+    for (const stack of this.records) {
+      this.reagregateRecords(stack);
+    }
 
     return this.records;
   }
@@ -102,11 +127,13 @@ export class Profiler {
   private async pipeHook(name: string, ...args: any[]) {
     const store = Profiler.asyncLocalStorage.getStore();
 
-    let start;
+    let startCpuTimer: number;
+    let startRealTimer: number;
     let record: ProfilerRecord;
 
     if (store) {
-      start = store.chrono.getDuration();
+      startCpuTimer = store.chrono.getDuration();
+      startRealTimer = this.getTime();
 
       let filteredArgs;
       if (this.config.capturePipeArguments) {
@@ -124,14 +151,16 @@ export class Profiler {
         args: filteredArgs,
         timestamp: Date.now(),
       };
-        
+
       store.stack.push(record);
     }
 
     let result = await this.oldPipeFunction(name, ...args);
 
     if (store) {
-      record.duration = store.chrono.getDuration() - start;
+      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+      record.realTime = this.getTime() - startRealTimer;
+
       if (record.type === "pipe" && this.config.capturePipeResult) {
         try {
           record.result = JSON.parse(JSON.stringify(result));
@@ -147,11 +176,13 @@ export class Profiler {
   private async eventHook(name: string, ...args: any[]) {
     const store = Profiler.asyncLocalStorage.getStore();
 
-    let start;
+    let startCpuTimer: number;
+    let startRealTimer: number;
     let record: ProfilerRecord;
 
     if (store) {
-      start = store.chrono.getDuration();
+      startCpuTimer = store.chrono.getDuration();
+      startRealTimer = this.getTime();
 
       let filteredArgs;
       if (this.config.captureHookArguments) {
@@ -176,7 +207,9 @@ export class Profiler {
     let result = await this.oldEventFunction(name, ...args);
 
     if (store) {
-      record.duration = store.chrono.getDuration() - start;
+      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+      record.realTime = this.getTime() - startRealTimer;
+
       if (record.type === "hook" && this.config.captureHookResult) {
         try {
           record.result = JSON.parse(JSON.stringify(result));
@@ -192,11 +225,13 @@ export class Profiler {
   private async askHook(name: string, ...args: any[]) {
     const store = Profiler.asyncLocalStorage.getStore();
 
-    let start;
+    let startCpuTimer: number;
+    let startRealTimer: number;
     let record: ProfilerRecord;
 
     if (store) {
-      start = store.chrono.getDuration();
+      startCpuTimer = store.chrono.getDuration();
+      startRealTimer = this.getTime();
 
       let filteredArgs;
       if (this.config.captureAskArguments) {
@@ -221,7 +256,9 @@ export class Profiler {
     let result = await this.oldAskFunction(name, ...args);
 
     if (store) {
-      record.duration = store.chrono.getDuration() - start;
+      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+      record.realTime = this.getTime() - startRealTimer;
+
       if (record.type === "ask" && this.config.captureAskResult) {
         try {
           record.result = JSON.parse(JSON.stringify(result));
@@ -262,15 +299,17 @@ export class Profiler {
     let result;
     Profiler.asyncLocalStorage.run(store, () => {
       chrono.start();
+      let startRealTimer = this.getTime();
       Profiler.currentStore = store;
 
       result = this.oldFunnelExecuteFunction(request, (...args: any[]) => {
         chrono.stop();
-        
+
         // console.log(`Funnel execute: ${request.input.controller}/${request.input.action} finished`, request);
 
-        record.duration = chrono.getDuration();
-        
+        record.cpuTime = chrono.getDuration();
+        record.realTime = this.getTime() - startRealTimer;
+
         if (record.type === "request") {
           record.response = {
             error: request.error,
@@ -281,25 +320,27 @@ export class Profiler {
 
           store.stack.pop();
         }
-        
+
         this.records.push(store.stack.getRoot());
-        
-        
+
+
         return callback(...args);
       });
     });
-    
+
     return result;
   }
 
   private async funnelPluginExecuteHook(request: Request) {
     const store = Profiler.asyncLocalStorage.getStore();
 
-    let start;
-    let record;
+    let startCpuTimer: number;
+    let startRealTimer: number;
+    let record: ProfilerRecord;
 
     if (store) {
-      start = store.chrono.getDuration();
+      startCpuTimer = store.chrono.getDuration();
+      startRealTimer = this.getTime();
 
       record = {
         type: "request",
@@ -323,15 +364,19 @@ export class Profiler {
 
     if (store) {
       console.log(`Funnel plugin execute: ${request.input.controller}/${request.input.action} finished`, request);
-      record.duration = store.chrono.getDuration() - start;
-      record.response = {
-        error: request.error,
-        headers: request.response.headers,
-        result: JSON.parse(JSON.stringify(request.response.result)),
-        status: request.status,
-      };
+      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+      record.realTime = this.getTime() - startRealTimer;
 
-      store.stack.pop(); 
+      if (record.type === "request") {
+        record.response = {
+          error: request.error,
+          headers: request.response.headers,
+          result: JSON.parse(JSON.stringify(request.response.result)),
+          status: request.status,
+        };
+      }
+
+      store.stack.pop();
     }
     return result;
   }
@@ -359,13 +404,13 @@ export class Profiler {
 
   private asyncHookBefore(asyncId: number) {
     const store = Profiler.asyncLocalStorage.getStore();
-    
+
     this.contextSwitch(store);
   }
 
   private asyncHookAfter(asyncId: number) {
     const store = Profiler.asyncLocalStorage.getStore();
-    
+
     this.contextSwitch(store);
   }
 
@@ -379,6 +424,6 @@ export class Profiler {
     const store = Profiler.asyncLocalStorage.getStore();
 
     this.contextSwitch(store);
-    
+
   }
 }

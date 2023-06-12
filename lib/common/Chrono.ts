@@ -1,3 +1,5 @@
+import { performance } from "perf_hooks";
+
 export enum ChronoState {
   STOPPED,
   RUNNING,
@@ -12,7 +14,7 @@ export class Chrono {
   private state: ChronoState = ChronoState.STOPPED;
 
   protected getTime(): number {
-    return Date.now();
+    return performance.now();
   }
 
   public getState(): ChronoState {

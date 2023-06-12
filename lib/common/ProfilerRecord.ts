@@ -1,7 +1,8 @@
 export type ProfilerRecord = {
   type: 'request';
   timestamp?: number;
-  duration?: number;
+  cpuTime?: number;
+  realTime?: number;
   requestId?: string;
   request?: {
     controller?: string;
@@ -21,7 +22,8 @@ export type ProfilerRecord = {
 } | {
   type: 'pipe' | 'hook' | 'ask';
   name?: string;
-  duration?: number;
+  cpuTime?: number;
+  realTime?: number;
   timestamp?: number;
   args?: any[];
   result?: any;
