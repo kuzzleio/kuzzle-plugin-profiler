@@ -155,22 +155,29 @@ export class Profiler {
       store.stack.push(record);
     }
 
-    let result = await this.oldPipeFunction(name, ...args);
+    let result;
+    try {
+      result = await this.oldPipeFunction(name, ...args);
+      return result;
+    } catch (e) {
+      throw e;
+    } finally {
+      if (store) {
+        record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+        record.realTime = this.getTime() - startRealTimer;
 
-    if (store) {
-      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
-      record.realTime = this.getTime() - startRealTimer;
-
-      if (record.type === "pipe" && this.config.capturePipeResult) {
-        try {
-          record.result = JSON.parse(JSON.stringify(result));
-        } catch (e) {
-          record.result = "Circular reference, cannot be serialized";
+        if (record.type === "pipe" && this.config.capturePipeResult) {
+          try {
+            record.result = JSON.parse(JSON.stringify(result));
+          } catch (e) {
+            record.result = "Circular reference, cannot be serialized";
+          }
         }
+
+        store.stack.pop();
       }
-      store.stack.pop();
     }
-    return result;
+
   }
 
   private async eventHook(name: string, ...args: any[]) {
@@ -204,22 +211,27 @@ export class Profiler {
       store.stack.push(record);
     }
 
-    let result = await this.oldEventFunction(name, ...args);
+    let result;
+    try {
+      result = await this.oldEventFunction(name, ...args);
+      return result;
+    } catch (e) {
+      throw e;
+    } finally {
+      if (store) {
+        record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+        record.realTime = this.getTime() - startRealTimer;
 
-    if (store) {
-      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
-      record.realTime = this.getTime() - startRealTimer;
-
-      if (record.type === "hook" && this.config.captureHookResult) {
-        try {
-          record.result = JSON.parse(JSON.stringify(result));
-        } catch (e) {
-          record.result = "Circular reference, cannot be serialized";
+        if (record.type === "hook" && this.config.captureHookResult) {
+          try {
+            record.result = JSON.parse(JSON.stringify(result));
+          } catch (e) {
+            record.result = "Circular reference, cannot be serialized";
+          }
         }
+        store.stack.pop();
       }
-      store.stack.pop();
     }
-    return result;
   }
 
   private async askHook(name: string, ...args: any[]) {
@@ -253,22 +265,27 @@ export class Profiler {
       store.stack.push(record);
     }
 
-    let result = await this.oldAskFunction(name, ...args);
+    let result;
+    try {
+      result = await this.oldAskFunction(name, ...args);
+      return result;
+    } catch (e) {
+      throw e;
+    } finally {
+      if (store) {
+        record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+        record.realTime = this.getTime() - startRealTimer;
 
-    if (store) {
-      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
-      record.realTime = this.getTime() - startRealTimer;
-
-      if (record.type === "ask" && this.config.captureAskResult) {
-        try {
-          record.result = JSON.parse(JSON.stringify(result));
-        } catch (e) {
-          record.result = "Circular reference, cannot be serialized";
+        if (record.type === "ask" && this.config.captureAskResult) {
+          try {
+            record.result = JSON.parse(JSON.stringify(result));
+          } catch (e) {
+            record.result = "Circular reference, cannot be serialized";
+          }
         }
+        store.stack.pop();
       }
-      store.stack.pop();
     }
-    return result;
   }
 
   private async funnelExecuteHook(request: Request, callback: any) {
@@ -310,15 +327,22 @@ export class Profiler {
         record.cpuTime = chrono.getDuration();
         record.realTime = this.getTime() - startRealTimer;
 
+        store.stack.pop();
         if (record.type === "request") {
+          let result = 'Unable to serialize result';
+
+          try {
+            result = JSON.parse(JSON.stringify(request.response.result));
+          } catch (e) {
+
+          }
           record.response = {
             error: request.error,
             headers: request.response.headers,
-            result: JSON.parse(JSON.stringify(request.response.result)),
+            result: result,
             status: request.status,
           };
 
-          store.stack.pop();
         }
 
         this.records.push(store.stack.getRoot());
@@ -360,25 +384,28 @@ export class Profiler {
       store.stack.push(record);
     }
 
-    let result = await this.oldFunnelPluginExecuteFunction(request);
+    try {
+      return await this.oldFunnelPluginExecuteFunction(request);
+    } catch (e) {
+      throw e;
+    } finally {
+      if (store) {
+        console.log(`Funnel plugin execute: ${request.input.controller}/${request.input.action} finished`, request);
+        record.cpuTime = store.chrono.getDuration() - startCpuTimer;
+        record.realTime = this.getTime() - startRealTimer;
 
-    if (store) {
-      console.log(`Funnel plugin execute: ${request.input.controller}/${request.input.action} finished`, request);
-      record.cpuTime = store.chrono.getDuration() - startCpuTimer;
-      record.realTime = this.getTime() - startRealTimer;
+        store.stack.pop();
 
-      if (record.type === "request") {
-        record.response = {
-          error: request.error,
-          headers: request.response.headers,
-          result: JSON.parse(JSON.stringify(request.response.result)),
-          status: request.status,
-        };
+        if (record.type === "request") {
+          record.response = {
+            error: request.error,
+            headers: request.response.headers,
+            result: JSON.parse(JSON.stringify(request.response.result)),
+            status: request.status,
+          };
+        }
       }
-
-      store.stack.pop();
     }
-    return result;
   }
 
   private contextSwitch(storage: ProfilerStore | undefined) {
