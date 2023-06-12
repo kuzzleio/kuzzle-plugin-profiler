@@ -86,7 +86,7 @@ export class Profiler {
       realTime += this.reagregateRecords(child);
     }
     if (stack.value) {
-      stack.value.realTime = realTime;
+      stack.value.realTime = Math.max(realTime, stack.value.realTime || 0);
     }
 
     return realTime;
