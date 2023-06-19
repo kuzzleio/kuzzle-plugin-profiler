@@ -1,8 +1,8 @@
 {
-  "name": "kuzzle-application",
-  "version": "1.0.0",
-  "description": "",
-  "author": "",
+  "name": "kuzzle-plugin-profiler",
+  "version": "0.1.0",
+  "description": "A plugin to profile what is going on in Kuzzle",
+  "author": "support@kuzzle.io",
   "scripts": {
     "build": "tsc --build tsconfig.json",
     "clean": "touch app.ts && npm run build | grep TSFILE | cut -d' ' -f 2 | xargs rm",
@@ -18,11 +18,10 @@
     "test:lint": "eslint ./src --ext .ts --config .eslintrc.json",
     "test:lint:fix": "eslint ./src --ext .ts --config .eslintrc.json --fix"
   },
-  "main": "app.ts",
+  "main": "dist/index.js",
   "license": "Apache-2.0",
   "dependencies": {
-    "kuzzle": "^2",
-    "kuzzle-plugin-prometheus": "^4.1.0"
+    "kuzzle": "^2"
   },
   "devDependencies": {
     "@types/node": "^14.14.37",

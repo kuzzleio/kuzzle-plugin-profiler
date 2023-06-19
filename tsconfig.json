@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "outDir": "dist",
-    "lib": ["ES6"],
+    "lib": [
+      "ES6"
+    ],
     "declaration": true,
     "listEmittedFiles": true,
     "module": "commonjs",
@@ -15,6 +17,7 @@
   "rootDir": "lib/",
   "include": [
     "app.ts",
+    "index.ts",
     "lib/**/*.ts"
   ],
   "exclude": [
